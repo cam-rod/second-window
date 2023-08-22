@@ -7,8 +7,11 @@ import {
     FileSystemAdapter,
     FuzzySuggestModal,
     MarkdownRenderer,
+    MarkdownView,
+    parseLinktext,
     Plugin,
     PluginSettingTab,
+    ReferenceCache,
     sanitizeHTMLToDom,
     Setting,
     TAbstractFile,
@@ -488,6 +491,32 @@ export default class ImageWindow extends Plugin {
                     }
                 };
                 modal.open();
+            }
+        });
+
+        this.addCommand({
+            id: "open-image-under-cursor",
+            name: "Open image underneath cursor in new window",
+            callback: () => {
+                const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+                if (activeView == null || activeView.editor == null) {
+                    console.error("Second Window: no active view was found.")
+                    return;
+                }
+
+                const cursor = activeView.editor.getCursor()
+                const internalLinks = (() => {
+                    let cache = this.app.metadataCache.getFileCache(activeView.file);
+                    return <ReferenceCache[]> ( cache.links ? cache.links.concat(cache.embeds ?? []) : cache.embeds)
+                })()
+
+                const cursorLink = internalLinks.find((link) =>
+                    cursor.line == link.position.start.line && cursor.line == link.position.end.line
+                    && link.position.start.col <= cursor.ch && cursor.ch < link.position.end.col);
+                if (cursorLink) {
+                    const targetFile = this.app.metadataCache.getFirstLinkpathDest(parseLinktext(cursorLink.link).path, activeView.file.path)
+                    this.defaultWindow.loadFile(targetFile);
+                }
             }
         });
 
